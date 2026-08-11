@@ -33,7 +33,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.bless.jarvis.viewmodel.ChatMessage
 import com.bless.jarvis.viewmodel.ChatViewModel
 import com.bless.jarvis.voice.VoiceManager
 
@@ -46,6 +45,7 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
     var isListening by remember { mutableStateOf(false) }
     var partialText by remember { mutableStateOf("") }
     var voiceError by remember { mutableStateOf<String?>(null) }
+    var lastSpokenIndex by remember { mutableIntStateOf(-1) }
 
     val voiceManager = remember(context) {
         VoiceManager(
@@ -71,8 +71,12 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
     LaunchedEffect(viewModel.messages.size) {
         if (viewModel.messages.isNotEmpty()) {
             listState.animateScrollToItem(viewModel.messages.lastIndex)
-            val message = viewModel.messages.last()
-            if (!message.isUser && message.speak && !viewModel.isLoading.value) voiceManager.speak(message.text, voiceMode)
+            val index = viewModel.messages.lastIndex
+            val message = viewModel.messages[index]
+            if (index != lastSpokenIndex && !message.isUser && message.speak) {
+                lastSpokenIndex = index
+                voiceManager.speak(message.text, voiceMode)
+            }
         }
     }
 
@@ -110,7 +114,7 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 contentPadding = PaddingValues(top = 12.dp, bottom = 16.dp)
             ) {
-                items(viewModel.messages) { MessageBubble(it) }
+                items(viewModel.messages) { message -> MessageBubble(message) }
                 if (viewModel.isLoading.value) item {
                     Surface(shape = RoundedCornerShape(18.dp), tonalElevation = 2.dp) {
                         Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -166,7 +170,7 @@ private fun VoicePulse() {
 }
 
 @Composable
-private fun MessageBubble(message: ChatMessage) {
+private fun MessageBubble(message: com.bless.jarvis.viewmodel.ChatMessage) {
     val alignment = if (message.isUser) Alignment.CenterEnd else Alignment.CenterStart
     val shape = if (message.isUser) RoundedCornerShape(20.dp, 20.dp, 5.dp, 20.dp) else RoundedCornerShape(20.dp, 20.dp, 20.dp, 5.dp)
     val brush = if (message.isUser) Brush.linearGradient(listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.secondaryContainer)) else Brush.linearGradient(listOf(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.surface))
