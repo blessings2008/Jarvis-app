@@ -7,7 +7,6 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
 import java.util.Locale
 
 class VoiceManager(
@@ -33,7 +32,7 @@ class VoiceManager(
     }
 
     fun startConversation() { continuous = true; startListening() }
-    fun stopConversation() { continuous = false; restarting = false; recognizer?.cancel(); tts?.stop(); onListeningChanged(false) }
+    fun stopConversation() { continuous = false; restarting = false; recognizer?.cancel(); onListeningChanged(false) }
 
     fun startListening() {
         val speechRecognizer = recognizer ?: run { onError("Speech recognition isn't available on this device."); return }
@@ -48,12 +47,11 @@ class VoiceManager(
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 900L)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 300L)
         }
-        try { speechRecognizer.startListening(intent) } catch (_: Exception) {
+        try { speechRecognizer.startListening(intent) } catch (e: Exception) {
             onListeningChanged(false); onError("Couldn't start voice recognition.")
         }
     }
 
-    fun stopConversationAfterCurrentSpeech() { continuous = false }
     fun stopListening() { continuous = false; recognizer?.stopListening(); onListeningChanged(false) }
 
     fun speak(text: String, resumeListening: Boolean = continuous) {
@@ -80,21 +78,18 @@ class VoiceManager(
         engine.language = locale
         engine.setSpeechRate(0.92f)
         engine.setPitch(0.90f)
-        val bestVoice = engine.voices?.filter { it.locale.language == locale.language && !it.isNotInstalled }
+        val bestVoice = engine.voices
+            ?.filter { it.locale.language == locale.language }
             ?.maxByOrNull { it.quality * 10 - it.latency }
         if (bestVoice != null) engine.voice = bestVoice
-        engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) {}
-            override fun onDone(utteranceId: String?) { if (continuous) startListening() }
-            @Deprecated("Deprecated in Java") override fun onError(utteranceId: String?) { if (continuous) startListening() }
-            override fun onError(utteranceId: String?, errorCode: Int) { if (continuous) startListening() }
-        })
     }
 
     override fun onResults(results: Bundle?) {
         onListeningChanged(false)
+        restarting = false
         val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim()
-        if (!text.isNullOrBlank()) onFinalText(text) else if (continuous) startListening()
+        if (!text.isNullOrBlank()) onFinalText(text)
+        else if (continuous) startListening()
     }
 
     override fun onPartialResults(partialResults: Bundle?) {
@@ -104,11 +99,13 @@ class VoiceManager(
 
     override fun onError(error: Int) {
         onListeningChanged(false)
-        if ((error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) && continuous && !restarting) {
-            restarting = true; startListening(); return
+        restarting = false
+        if ((error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) && continuous) {
+            startListening()
+            return
         }
-        if (error != SpeechRecognizer.ERROR_CLIENT && error != SpeechRecognizer.ERROR_NO_MATCH) onError("Voice recognition failed. Try again.")
-        if (continuous && error != SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS && !restarting) startListening()
+        if (error != SpeechRecognizer.ERROR_CLIENT) onError("Voice recognition failed. Try again.")
+        if (continuous && error != SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) startListening()
     }
 
     override fun onReadyForSpeech(params: Bundle?) { onListeningChanged(true) }
