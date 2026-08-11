@@ -14,7 +14,8 @@ import java.util.UUID
 
 data class ChatMessage(
     val text: String,
-    val isUser: Boolean
+    val isUser: Boolean,
+    val speak: Boolean = !isUser
 )
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
@@ -26,60 +27,38 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     val errorMessage = mutableStateOf<String?>(null)
 
     init {
-        messages.add(ChatMessage("Online. Standing by, Bless.", isUser = false))
+        messages.add(ChatMessage("Online. Standing by, Bless.", isUser = false, speak = false))
     }
 
-    fun onInputChange(newText: String) {
-        inputText.value = newText
-    }
+    fun onInputChange(newText: String) { inputText.value = newText }
 
     fun sendMessage(message: String = inputText.value) {
         val text = message.trim()
         if (text.isEmpty() || isLoading.value) return
-
-        messages.add(ChatMessage(text, isUser = true))
+        messages.add(ChatMessage(text, isUser = true, speak = false))
         inputText.value = ""
         isLoading.value = true
         errorMessage.value = null
-
         viewModelScope.launch {
             try {
-                val response = RetrofitClient.api.sendMessage(
-                    ChatRequest(message = text, sessionId = sessionId)
-                )
-
-                val reply = response.reply ?: "I didn't get a proper response, Bless."
-                messages.add(ChatMessage(reply, isUser = false))
-
+                val response = RetrofitClient.api.sendMessage(ChatRequest(text, sessionId))
+                messages.add(ChatMessage(response.reply ?: "I didn't get a proper response, Bless.", false, true))
                 response.actions?.forEach { action ->
-                    if (action.requires_confirmation == true) return@forEach
-                    executeAndReport(action.name, action.parameters, action.id)
+                    if (action.requires_confirmation != true) executeAndReport(action.name, action.parameters, action.id)
                 }
             } catch (e: Exception) {
                 errorMessage.value = "Connection error: ${e.message}"
-                messages.add(ChatMessage("Sorry, I couldn't reach the server. (${e.message})", isUser = false))
-            } finally {
-                isLoading.value = false
-            }
+                messages.add(ChatMessage("I couldn't reach the server. Please check your connection.", false, true))
+            } finally { isLoading.value = false }
         }
     }
 
     private suspend fun executeAndReport(actionName: String, parameters: Map<String, Any>?, actionId: String?) {
         val result = ActionExecutor.execute(getApplication(), actionName, parameters)
-        messages.add(ChatMessage("[$actionName -> ${result.status}: ${result.details}]", isUser = false))
-
+        // Keep technical execution details visible in chat, but never read them aloud.
+        messages.add(ChatMessage("[$actionName → ${result.status}: ${result.details}]", false, false))
         try {
-            RetrofitClient.api.reportActionResult(
-                ActionResultRequest(
-                    sessionId = sessionId,
-                    action = actionName,
-                    actionId = actionId,
-                    status = result.status,
-                    details = result.details
-                )
-            )
-        } catch (_: Exception) {
-            // Non-fatal — the action already ran either way.
-        }
+            RetrofitClient.api.reportActionResult(ActionResultRequest(sessionId, actionName, actionId, result.status, result.details))
+        } catch (_: Exception) { }
     }
 }
