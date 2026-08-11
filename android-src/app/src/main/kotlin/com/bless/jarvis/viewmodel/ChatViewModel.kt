@@ -33,8 +33,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         inputText.value = newText
     }
 
-    fun sendMessage() {
-        val text = inputText.value.trim()
+    fun sendMessage(message: String = inputText.value) {
+        val text = message.trim()
         if (text.isEmpty() || isLoading.value) return
 
         messages.add(ChatMessage(text, isUser = true))
@@ -52,9 +52,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 messages.add(ChatMessage(reply, isUser = false))
 
                 response.actions?.forEach { action ->
-                    if (action.requires_confirmation == true) {
-                        return@forEach
-                    }
+                    if (action.requires_confirmation == true) return@forEach
                     executeAndReport(action.name, action.parameters, action.id)
                 }
             } catch (e: Exception) {
@@ -80,7 +78,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     details = result.details
                 )
             )
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // Non-fatal — the action already ran either way.
         }
     }
