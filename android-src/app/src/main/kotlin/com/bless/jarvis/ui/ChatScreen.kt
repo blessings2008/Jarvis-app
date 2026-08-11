@@ -35,12 +35,7 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
     var speechRecognizer by remember { mutableStateOf<SpeechRecognizer?>(null) }
 
     val textToSpeech = remember {
-        TextToSpeech(context) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                // Use the device's current locale when available.
-                TextToSpeech(context, null).shutdown()
-            }
-        }
+        TextToSpeech(context, null)
     }
 
     DisposableEffect(Unit) {
@@ -54,7 +49,8 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) {
+        if (granted && SpeechRecognizer.isRecognitionAvailable(context)) {
+            speechRecognizer?.destroy()
             speechRecognizer = startListening(
                 context = context,
                 onResult = { text ->
@@ -75,7 +71,12 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
             val lastMessage = viewModel.messages.last()
             if (!lastMessage.isUser && viewModel.messages.size > 1) {
                 textToSpeech.language = Locale.getDefault()
-                textToSpeech.speak(lastMessage.text, TextToSpeech.QUEUE_FLUSH, null, "jarvis-${viewModel.messages.size}")
+                textToSpeech.speak(
+                    lastMessage.text,
+                    TextToSpeech.QUEUE_FLUSH,
+                    null,
+                    "jarvis-${viewModel.messages.size}"
+                )
             }
         }
     }
@@ -157,7 +158,10 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
                     Text(if (isListening) "■" else "🎙")
                 }
                 Spacer(modifier = Modifier.width(6.dp))
-                Button(onClick = { viewModel.sendMessage() }, enabled = viewModel.inputText.value.isNotBlank() && !viewModel.isLoading.value) {
+                Button(
+                    onClick = { viewModel.sendMessage() },
+                    enabled = viewModel.inputText.value.isNotBlank() && !viewModel.isLoading.value
+                ) {
                     Text("Send")
                 }
             }
