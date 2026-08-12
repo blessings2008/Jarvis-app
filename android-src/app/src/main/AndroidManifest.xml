@@ -17,6 +17,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".shizuku.JarvisShellService"
+            android:exported="false"
+            android:process=":shizuku" />
     </application>
 
 </manifest>
