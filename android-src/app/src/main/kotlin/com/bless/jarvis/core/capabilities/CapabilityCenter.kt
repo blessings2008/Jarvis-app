@@ -15,11 +15,9 @@ data class CapabilityInfo(
     val successRate: Int? = null
 )
 
-enum class CapabilityStatus { ACTIVE, NOT_WIRED, REQUIRES_SKILL, REQUIRES_PERMISSION, OFFLINE }
-
 object CapabilityCenter {
     private val capabilities = listOf(
-        CapabilityInfo("ai_chat", "AI Chat", "Talk to the JARVIS cloud brain.", "Cloud", CapabilityStatus.ACTIVE, usageCount = 0),
+        CapabilityInfo("ai_chat", "AI Chat", "Talk to the JARVIS cloud brain.", "Cloud", CapabilityStatus.ACTIVE),
         CapabilityInfo("open_app", "Open Applications", "Launch supported Android applications.", "Local Android", CapabilityStatus.ACTIVE),
         CapabilityInfo("voice", "Voice Assistant", "Speech input and spoken responses.", "Local Android", CapabilityStatus.ACTIVE, permissions = listOf("Microphone")),
         CapabilityInfo("shizuku", "Device Control", "Privileged Android operations through Shizuku.", "Integration", CapabilityStatus.REQUIRES_PERMISSION, permissions = listOf("Shizuku")),
