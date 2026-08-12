@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -23,14 +24,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.bless.jarvis.core.skills.SkillManager
 import com.bless.jarvis.core.skills.SkillManifest
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SkillStoreScreen() {
-    val context = LocalLifecycleOwner.current.lifecycle.let { androidx.compose.ui.platform.LocalContext.current }
+    val context = LocalContext.current
     var installed by remember { mutableStateOf(SkillManager.installed(context).map { it.id }.toSet()) }
     var selected by remember { mutableStateOf<SkillManifest?>(null) }
     LaunchedEffect(Unit) { installed = SkillManager.installed(context).map { it.id }.toSet() }
@@ -61,7 +63,7 @@ fun SkillStoreScreen() {
 }
 
 @Composable private fun SkillDetail(skill: SkillManifest, installed: Boolean, modifier: Modifier, onDone: () -> Unit) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     var status by remember { mutableStateOf("") }
     Column(modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("‹ Back", Modifier.clickable(onClick = onDone))
