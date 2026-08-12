@@ -1,30 +1,80 @@
 package com.bless.jarvis.shizuku
 
+import android.content.ComponentName
+import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.os.IBinder
 import rikka.shizuku.Shizuku
 
-/**
- * Small, centralized gate for JARVIS's Shizuku capabilities.
- * Shizuku must be running and the user must explicitly grant JARVIS access.
- */
+/** Central lifecycle/permission gate for JARVIS's Shizuku integration. */
 object ShizukuManager {
     const val REQUEST_CODE = 7001
 
-    fun isAvailable(): Boolean = try {
-        Shizuku.pingBinder()
-    } catch (_: Exception) {
-        false
+    @Volatile private var shellService: IJarvisShellService? = null
+    @Volatile private var connection: ServiceConnection? = null
+    private val serviceArgs by lazy {
+        Shizuku.UserServiceArgs(
+            ComponentName("com.bless.jarvis", JarvisShellService::class.java.name)
+        )
+            .daemon(false)
+            .processNameSuffix("shizuku")
+            .debuggable(false)
+            .version(1)
     }
+
+    fun isAvailable(): Boolean = try { Shizuku.pingBinder() } catch (_: Exception) { false }
 
     fun hasPermission(): Boolean = isAvailable() && try {
         Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
-    } catch (_: Exception) {
-        false
-    }
+    } catch (_: Exception) { false }
 
     fun requestPermission() {
-        if (isAvailable() && !hasPermission()) {
-            Shizuku.requestPermission(REQUEST_CODE)
+        if (isAvailable() && !hasPermission()) Shizuku.requestPermission(REQUEST_CODE)
+    }
+
+    fun isConnected(): Boolean = shellService != null && try { shellService?.asBinder()?.pingBinder() == true } catch (_: Exception) { false }
+
+    fun connect(onChanged: (() -> Unit)? = null): Boolean {
+        if (!isAvailable() || !hasPermission()) return false
+        if (isConnected()) return true
+
+        val serviceConnection = object : ServiceConnection {
+            override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+                shellService = binder?.let { IJarvisShellService.Stub.asInterface(it) }
+                onChanged?.invoke()
+            }
+
+            override fun onServiceDisconnected(name: ComponentName?) {
+                shellService = null
+                onChanged?.invoke()
+            }
+        }
+        connection = serviceConnection
+        return try {
+            Shizuku.bindUserService(serviceArgs, serviceConnection)
+            true
+        } catch (_: Exception) {
+            connection = null
+            false
+        }
+    }
+
+    fun disconnect() {
+        val current = connection ?: return
+        try { Shizuku.unbindUserService(serviceArgs, current, true) } catch (_: Exception) { }
+        shellService = null
+        connection = null
+    }
+
+    /** Executes only commands selected by the local allow-list in ShizukuActionExecutor. */
+    fun executeAllowed(command: Array<String>): Result<String> {
+        if (!isAvailable()) return Result.failure(IllegalStateException("Shizuku is not running."))
+        if (!hasPermission()) return Result.failure(SecurityException("JARVIS does not have Shizuku permission."))
+        if (!isConnected() && !connect()) return Result.failure(IllegalStateException("JARVIS could not connect to the Shizuku service."))
+        return try {
+            Result.success(shellService!!.execute(command))
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 }
