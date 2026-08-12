@@ -2,6 +2,7 @@ package com.bless.jarvis.execution
 
 import android.content.Context
 import android.content.Intent
+import com.bless.jarvis.shizuku.ShizukuActionExecutor
 
 data class ExecutionResult(
     val status: String,
@@ -25,10 +26,19 @@ object ActionExecutor {
     )
 
     fun execute(context: Context, actionName: String, parameters: Map<String, Any>?): ExecutionResult {
-        return when (actionName) {
-            "open_app" -> openApp(context, parameters)
+        return when {
+            actionName == "open_app" -> openApp(context, parameters)
+            ShizukuActionExecutor.handles(actionName) -> runShizukuAction(actionName, parameters)
             else -> ExecutionResult("failure", "\"$actionName\" isn't wired up on the Android side yet.")
         }
+    }
+
+    private fun runShizukuAction(actionName: String, parameters: Map<String, Any>?): ExecutionResult {
+        val result = ShizukuActionExecutor.execute(actionName, parameters)
+        return result.fold(
+            onSuccess = { details -> ExecutionResult("success", details) },
+            onFailure = { error -> ExecutionResult("failure", error.message ?: "Unknown Shizuku error.") }
+        )
     }
 
     private fun openApp(context: Context, parameters: Map<String, Any>?): ExecutionResult {
