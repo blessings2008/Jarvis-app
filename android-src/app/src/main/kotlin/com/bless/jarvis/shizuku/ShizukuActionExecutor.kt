@@ -31,35 +31,39 @@ object ShizukuActionExecutor {
 
         return try {
             when (actionName) {
-                "get_android_version" -> command(arrayOf("getprop", "ro.build.version.release"), "Android version")
-                "list_installed_packages" -> command(arrayOf("pm", "list", "packages"), "Installed packages")
+                "get_android_version" -> command(arrayOf("/system/bin/getprop", "ro.build.version.release"), "Android version")
+                "list_installed_packages" -> command(arrayOf("/system/bin/pm", "list", "packages"), "Installed packages")
                 "reboot" -> reboot()
                 "volume_up" -> volume(true, parameters)
                 "volume_down" -> volume(false, parameters)
                 "screenshot" -> screenshot()
                 else -> Result.failure(UnsupportedOperationException("Shizuku action '$actionName' is not implemented."))
             }
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(IllegalStateException("$actionName failed: ${e.javaClass.simpleName}: ${e.message ?: "no error message"}", e))
+        }
     }
 
     private fun command(command: Array<String>, label: String): Result<String> {
         val result = ShizukuShell.run(command)
         return if (result.exitCode == 0) Result.success("$label:\n${result.output.ifBlank { "No output." }}")
-        else Result.failure(IllegalStateException("$label failed: ${result.output.ifBlank { "exit code ${result.exitCode}" }}"))
+        else Result.failure(IllegalStateException("$label failed (exit ${result.exitCode}): ${result.output.ifBlank { "no command output" }}"))
     }
 
     private fun reboot(): Result<String> {
-        val result = ShizukuShell.run(arrayOf("reboot"))
+        val result = ShizukuShell.run(arrayOf("/system/bin/reboot"))
         return if (result.exitCode == 0) Result.success("Rebooting now.")
-        else Result.failure(IllegalStateException("Reboot failed: ${result.output.ifBlank { "exit code ${result.exitCode}" }}"))
+        else Result.failure(IllegalStateException("Reboot failed (exit ${result.exitCode}): ${result.output.ifBlank { "no command output" }}"))
     }
 
     private fun volume(up: Boolean, parameters: Map<String, Any>?): Result<String> {
         val steps = (parameters?.get("steps") as? Number)?.toInt()?.coerceIn(1, 15) ?: 1
         val keyEvent = if (up) "24" else "25"
         repeat(steps) {
-            val result = ShizukuShell.run(arrayOf("input", "keyevent", keyEvent))
-            if (result.exitCode != 0) return Result.failure(IllegalStateException("Volume command failed: ${result.output.ifBlank { "exit code ${result.exitCode}" }}"))
+            val result = ShizukuShell.run(arrayOf("/system/bin/input", "keyevent", keyEvent))
+            if (result.exitCode != 0) {
+                return Result.failure(IllegalStateException("Volume command failed (exit ${result.exitCode}): ${result.output.ifBlank { "no command output" }}"))
+            }
         }
         return Result.success("Volume ${if (up) "up" else "down"} by $steps step(s).")
     }
@@ -67,9 +71,9 @@ object ShizukuActionExecutor {
     private fun screenshot(): Result<String> {
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val path = "/sdcard/Pictures/jarvis_$timestamp.png"
-        ShizukuShell.run(arrayOf("mkdir", "-p", "/sdcard/Pictures"))
-        val result = ShizukuShell.run(arrayOf("screencap", "-p", path))
+        ShizukuShell.run(arrayOf("/system/bin/mkdir", "-p", "/sdcard/Pictures"))
+        val result = ShizukuShell.run(arrayOf("/system/bin/screencap", "-p", path))
         return if (result.exitCode == 0) Result.success("Screenshot saved to $path")
-        else Result.failure(IllegalStateException("Screenshot failed: ${result.output.ifBlank { "exit code ${result.exitCode}" }}"))
+        else Result.failure(IllegalStateException("Screenshot failed (exit ${result.exitCode}): ${result.output.ifBlank { "no command output" }}"))
     }
 }
