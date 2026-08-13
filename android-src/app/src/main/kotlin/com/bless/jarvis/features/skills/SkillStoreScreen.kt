@@ -81,3 +81,5 @@ fun SkillStoreScreen() {
         if (status.isNotEmpty()) Text(status)
     }
 }
+
+// Build verification touchpoint for the modular skills screen.
