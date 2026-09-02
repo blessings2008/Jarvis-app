@@ -8,6 +8,7 @@ import com.bless.jarvis.core.network.Capability
 import com.bless.jarvis.core.network.CapabilityRequest
 import com.bless.jarvis.core.network.ChatRequest
 import com.bless.jarvis.core.network.RetrofitClient
+import com.bless.jarvis.core.network.ToolCall
 import com.bless.jarvis.core.network.WorldRequest
 import com.bless.jarvis.execution.ActionExecutor
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -69,6 +70,21 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         RetrofitClient.api.world(WorldRequest(sessionId, observation))
     }
 
+    private fun actionMessage(call: ToolCall, result: Map<String, Any?>): String {
+        val completed = result["completed"] == true
+        if (!completed) return "I couldn't complete ${call.name}: ${result["error"] ?: "the Android body reported a failure."}"
+        return when (call.name) {
+            "get_battery" -> "Battery is at ${result["percent"] ?: "unknown"}% ."
+            "get_volume" -> "Media volume is ${result["music"] ?: "unknown"}/${result["max"] ?: "unknown"}."
+            "set_volume" -> "Media volume set to ${result["volume"] ?: "the requested level"}."
+            "open_app" -> "Done. The requested app was opened."
+            "launch_url" -> "Done. I opened the requested link."
+            "device_info" -> "Device: ${result["manufacturer"] ?: "unknown"} ${result["model"] ?: ""}, Android ${result["android"] ?: "unknown"}."
+            "open_settings" -> "Done. Android Settings is open."
+            else -> "Done."
+        }
+    }
+
     fun send(text: String) {
         if (text.isBlank()) return
         val clean = text.trim()
@@ -83,6 +99,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 val response = RetrofitClient.api.chat(ChatRequest(sessionId, clean))
                 _online.value = true
+                var executedMessage: String? = null
                 for (call in response.tool_calls) {
                     _state.value = "ACTING"
                     _activity.value = "Executing ${call.name}"
@@ -91,12 +108,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     } catch (e: Exception) {
                         mapOf("completed" to false, "error" to (e.message ?: "Action failed"))
                     }
-                    // A failed world-state report must never turn a completed brain request
-                    // into the misleading "I can't reach my brain" message.
+                    executedMessage = actionMessage(call, result)
                     try { report(mapOf("environment" to mapOf("last_action" to call.name, "result" to result))) } catch (_: Exception) { }
                 }
                 val message = response.message.ifBlank {
-                    if (response.tool_calls.isNotEmpty()) "Action completed." else "I'm here."
+                    executedMessage ?: if (response.tool_calls.isNotEmpty()) "Action completed." else "I'm here."
                 }
                 _messages.value = _messages.value + UiMessage(message, true)
                 _state.value = if (response.decision == "learn") "LEARNING" else "READY"
